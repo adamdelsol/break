@@ -21,8 +21,8 @@ export type Status =
   | "closing"
   | "active";
 
-export interface AccountsConfig {
-  programAccounts: PublicKey[];
+export interface Config {
+  program: PublicKey[];
   feePayerKeypairs: Keypair[];
   accountCapacity: number;
 }
@@ -35,20 +35,20 @@ interface AccountCosts {
 
 interface State {
   status: Status;
-  accounts?: AccountsConfig;
+  ?: Config;
   creationCost?: number;
   deactivate: () => void;
-  createAccounts: () => Promise<void>;
-  closeAccounts: () => Promise<void>;
+  create: () => Promise<void>;
+  close: () => Promise<void>;
 }
 
 const StateContext = React.createContext<State | undefined>(undefined);
 
 type Props = { children: React.ReactNode };
-export function AccountsProvider({ children }: Props) {
+export function Provider({ children }: Props) {
   const [costs, setCosts] = React.useState<AccountCosts>();
   const [status, setStatus] = React.useState<Status>("initializing");
-  const [accounts, setAccounts] = React.useState<AccountsConfig>();
+  const [, set] = React.useState<Config>();
   const connection = useConnection();
   const wallet = useWalletState().wallet;
   const creationLock = React.useRef(false);
@@ -59,7 +59,7 @@ export function AccountsProvider({ children }: Props) {
   React.useEffect(() => {
     calculationCounter.current++;
     setStatus("initializing");
-    setAccounts(undefined);
+    set(undefined);
     if (!connection) return;
     const savedCounter = calculationCounter.current;
     (async () => {
@@ -92,11 +92,11 @@ export function AccountsProvider({ children }: Props) {
     if (!creationLock.current) setStatus("inactive");
   }, [creationLock]);
 
-  const closeAccounts = React.useCallback(async () => {
+  const close = React.useCallback(async () => {
     if (!connection) {
-      throw new Error("Can't close accounts until connection is valid");
+      throw new Error("Can't close  until connection is valid");
     } else if (!wallet) {
-      throw new Error("Can't create accounts if wallet is not setup");
+      throw new Error("Can't create  if wallet is not setup");
     } else if (creationLock.current) {
       console.warn("Account closing is locked");
       return;
@@ -104,7 +104,7 @@ export function AccountsProvider({ children }: Props) {
       creationLock.current = true;
       setStatus("closing");
       try {
-        await _closeAccounts(connection, wallet, parallelization);
+        await _close(connection, wallet, parallelization);
       } finally {
         setStatus("inactive");
         creationLock.current = false;
@@ -112,7 +112,7 @@ export function AccountsProvider({ children }: Props) {
     }
   }, [creationLock, status, wallet, connection, parallelization]);
 
-  const createAccounts = React.useCallback(async () => {
+  const create = React.useCallback(async () => {
     if (!connection) {
       throw new Error("Invalid connection");
     } else if (!breakProgramId) {
@@ -128,18 +128,18 @@ export function AccountsProvider({ children }: Props) {
       creationLock.current = true;
       setStatus("creating");
       try {
-        const newAccounts = await _createAccounts(
+        const new = await _create(
           connection,
           breakProgramId,
           wallet,
           costs,
           parallelization
         );
-        setAccounts(newAccounts);
+        set(new);
         setStatus("active");
       } catch (err) {
-        console.error("Failed to create accounts", err);
-        setAccounts(undefined);
+        console.error("Failed to create ", err);
+        set(undefined);
         setStatus("inactive");
       } finally {
         creationLock.current = false;
@@ -160,13 +160,13 @@ export function AccountsProvider({ children }: Props) {
   const state: State = React.useMemo(
     () => ({
       status,
-      accounts,
+      ,
       creationCost: costs?.total,
       deactivate,
-      closeAccounts,
-      createAccounts,
+      close,
+      create,
     }),
-    [status, accounts, costs, deactivate, closeAccounts, createAccounts]
+    [status, , costs, deactivate, close, create]
   );
 
   return (
@@ -174,25 +174,25 @@ export function AccountsProvider({ children }: Props) {
   );
 }
 
-export function useAccountsState() {
+export function useState() {
   const context = React.useContext(StateContext);
   if (!context) {
-    throw new Error(`useAccountsState must be used within a AccountsProvider`);
+    throw new Error(`useState must be used within a Provider`);
   }
   return context;
 }
 
 const TX_PER_BYTE = 8;
 
-function calculateProgramAccountSpace(parallelization: number) {
+function calculateProgrampace(parallelization: number) {
   return Math.ceil(1000 / parallelization / TX_PER_BYTE);
 }
 
-function calculateTransactionsPerAccount(programAccountSpace: number) {
-  return TX_PER_BYTE * programAccountSpace;
+function calculateTransactionsPerAccount(programpace: number) {
+  return TX_PER_BYTE * programpace;
 }
 
-const _closeAccounts = async (
+const _close = async (
   connection: Connection,
   payer: Keypair,
   parallelization: number
@@ -222,14 +222,14 @@ const calculateCosts = async (
   connection: Connection,
   parallelization: number
 ): Promise<AccountCosts> => {
-  const programAccountSpace = calculateProgramAccountSpace(parallelization);
+  const programpace = calculateProgrampace(parallelization);
   const programAccountCost = await connection.getMinimumBalanceForRentExemption(
-    programAccountSpace
+    programpace
   );
   const feeAccountRent = await connection.getMinimumBalanceForRentExemption(0);
   const { feeCalculator } = await connection.getRecentBlockhash();
   const signatureFee = feeCalculator.lamportsPerSignature;
-  const txPerAccount = calculateTransactionsPerAccount(programAccountSpace);
+  const txPerAccount = calculateTransactionsPerAccount(programpace);
   const feeAccountCost = txPerAccount * signatureFee + feeAccountRent;
 
   return {
@@ -245,10 +245,10 @@ const _createAccountBatch = async (
   payer: Keypair,
   costs: AccountCosts,
   newFeePayers: Keypair[],
-  newProgramAccounts: Keypair[],
-  programAccountSpace: number
+  newProgram: Keypair[],
+  programpace: number
 ) => {
-  const batchSize = newProgramAccounts.length;
+  const batchSize = newProgram.length;
   if (batchSize !== newFeePayers.length) {
     throw new Error("Internal error");
   }
@@ -258,9 +258,9 @@ const _createAccountBatch = async (
     tx.add(
       SystemProgram.createAccount({
         fromPubkey: payer.publicKey,
-        newAccountPubkey: newProgramAccounts[i].publicKey,
+        newAccountPubkey: newProgram[i].publicKey,
         lamports: costs.programAccountCost,
-        space: programAccountSpace,
+        space: programpace,
         programId: breakProgramId,
       })
     );
@@ -279,7 +279,7 @@ const _createAccountBatch = async (
       await sendAndConfirmTransaction(
         connection,
         tx,
-        [payer, ...newProgramAccounts],
+        [payer, ...newProgram],
         { preflightCommitment: "confirmed" }
       );
       break;
@@ -289,23 +289,23 @@ const _createAccountBatch = async (
         throw new Error("Couldn't confirm transaction");
       }
       console.error(
-        `Failed to create accounts, retries remaining: ${retries}`,
+        `Failed to create , retries remaining: ${retries}`,
         err
       );
     }
   }
 };
 
-const _createAccounts = async (
+const _create = async (
   connection: Connection,
   breakProgramId: PublicKey,
   payer: Keypair,
   costs: AccountCosts,
   parallelization: number
-): Promise<AccountsConfig> => {
-  const programAccountSpace = calculateProgramAccountSpace(parallelization);
+): Promise<Config> => {
+  const programpace = calculateProgrampace(parallelization);
   const feePayers = getFeePayers(parallelization);
-  const programAccounts = Array(parallelization)
+  const program = Array(parallelization)
     .fill(0)
     .map(() => new Keypair());
 
@@ -319,17 +319,17 @@ const _createAccounts = async (
       payer,
       costs,
       feePayers.slice(accountIndex, accountIndex + BATCH_SIZE),
-      programAccounts.slice(accountIndex, accountIndex + BATCH_SIZE),
-      programAccountSpace
+      program.slice(accountIndex, accountIndex + BATCH_SIZE),
+      programpace
     );
 
     accountIndex += BATCH_SIZE;
   }
 
-  const txPerAccount = calculateTransactionsPerAccount(programAccountSpace);
+  const txPerAccount = calculateTransactionsPerAccount(programpace);
   return {
     accountCapacity: txPerAccount,
     feePayerKeypairs: feePayers,
-    programAccounts: programAccounts.map((a) => a.publicKey),
+    program: program.map((a) => a.publicKey),
   };
 };

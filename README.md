@@ -4,3 +4,8 @@
 - retry logic
 - gets txn tracking information
 - has pending txn status
+
+## accounts
+
+- program data account for the executable game program
+- account for game state
